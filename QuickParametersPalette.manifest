@@ -1,0 +1,13 @@
+{
+  "autodeskProduct": "Fusion360",
+  "type": "addin",
+  "id": "cfd634d6-31c2-4df4-a6c6-quickparameterspal",
+  "author": "OpenAI",
+  "description": {
+    "": "Persistent quick parameter editor with per-design parameter selection files."
+  },
+  "version": "1.2.0",
+  "runOnStartup": false,
+  "supportedOS": "windows|mac",
+  "editEnabled": true
+}

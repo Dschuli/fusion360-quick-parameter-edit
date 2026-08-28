@@ -1,0 +1,8 @@
+{
+  "parameters": [
+    "a_cable_width",
+    "a_cable_height",
+    "b_slope_angle",
+    "c_base_angle"
+  ]
+}

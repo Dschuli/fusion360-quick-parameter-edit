@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Quick Parameters</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: Arial, sans-serif;
+    margin: 12px;
+    font-size: 13px;
+  }
+  .row {
+    display: grid;
+    grid-template-columns: 42% 58%;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  label.param-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  input[type="text"], select {
+    width: 100%;
+    padding: 5px 6px;
+  }
+  input.missing { opacity: 0.55; }
+  input.input-error {
+    border: 2px solid #d93025 !important;
+    background: rgba(217,48,37,.10);
+    outline: none;
+  }
+  #autocomplete {
+    display: none;
+    position: fixed;
+    z-index: 9999;
+    border: 1px solid rgba(128,128,128,.65);
+    border-radius: 4px;
+    background: Canvas;
+    color: CanvasText;
+    box-shadow: 0 3px 12px rgba(0,0,0,.25);
+    max-height: 240px;
+    overflow-y: auto;
+    min-width: 180px;
+  }
+  .ac-group {
+    padding: 5px 8px 3px 8px;
+    font-size: 10px;
+    font-weight: bold;
+    opacity: .62;
+    text-transform: uppercase;
+    letter-spacing: .35px;
+  }
+  .ac-item {
+    padding: 5px 8px;
+    cursor: default;
+    white-space: nowrap;
+  }
+  .ac-item.active {
+    background: Highlight;
+    color: HighlightText;
+  }
+  .ac-detail {
+    opacity: .55;
+    font-size: 10px;
+    margin-left: 7px;
+  }
+  .buttons {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+  }
+  button { padding: 6px 12px; }
+  #status {
+    margin-top: 10px;
+    min-height: 18px;
+    font-size: 12px;
+  }
+  #status.error { font-weight: bold; }
+  hr {
+    margin: 14px 0;
+    border: 0;
+    border-top: 1px solid rgba(128,128,128,.45);
+  }
+  #manager {
+    display: none;
+    margin-top: 8px;
+  }
+  .manager-tools {
+    display: grid;
+    grid-template-columns: 1fr 125px;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .small-buttons {
+    display: flex;
+    gap: 6px;
+    margin: 7px 0;
+    flex-wrap: wrap;
+  }
+  .small-buttons button {
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+  #parameterList {
+    border: 1px solid rgba(128,128,128,.45);
+    max-height: 270px;
+    overflow-y: auto;
+    padding: 4px 7px;
+  }
+  .select-row {
+    display: grid;
+    grid-template-columns: 24px 1fr;
+    gap: 4px;
+    align-items: center;
+    min-height: 27px;
+    border-bottom: 1px solid rgba(128,128,128,.18);
+  }
+  .select-row:last-child { border-bottom: none; }
+  .select-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: default;
+  }
+  .expr-preview {
+    opacity: .65;
+    font-size: 11px;
+    margin-left: 6px;
+  }
+  .section-title {
+    font-weight: bold;
+    margin-bottom: 7px;
+  }
+  .count {
+    opacity: .7;
+    font-size: 11px;
+    margin: 5px 0;
+  }
+  .pathText {
+    font-family: Consolas, "Courier New", monospace;
+    user-select: text;
+    word-break: break-all;
+  }
+</style>
+</head>
+<body>
+
+<div class="section-title">Quick edit</div>
+<div id="parameters"></div>
+
+<div class="buttons">
+  <button id="apply">Apply</button>
+  <button id="reload">Reload from design</button>
+  <button id="toggleManager">Manage parameters…</button>
+</div>
+
+<div id="status">Loading...</div>
+
+<div id="manager">
+  <hr>
+  <div class="section-title">Choose quick parameters</div>
+
+  <div class="manager-tools">
+    <input id="filter" type="text" placeholder="Filter parameter names…">
+    <select id="sort">
+      <option value="favorites" selected>Favorites first</option>
+      <option value="az">Name A–Z</option>
+      <option value="za">Name Z–A</option>
+      <option value="selected">Selected first</option>
+      <option value="unselected">Unselected first</option>
+    </select>
+  </div>
+
+  <div class="small-buttons">
+    <button id="selectVisible">Select visible</button>
+    <button id="clearVisible">Clear visible</button>
+  </div>
+
+  <div id="listCount" class="count"></div>
+  <div id="parameterList"></div>
+
+  <div class="buttons">
+    <button id="saveSelection"><strong>Apply selection</strong></button>
+    <button id="cancelManager">Close</button>
+  </div>
+</div>
+
+<hr>
+<div class="section-title">Design config</div>
+<div id="configInfo" class="count">No config folder selected.</div>
+<div class="buttons" style="margin-top:6px; margin-bottom:4px;">
+  <button id="chooseConfigFolder">Config folder…</button>
+</div>
+
+<div id="autocomplete"></div>
+
+<script>
+let currentNames = [];
+let allParameters = [];
+let checkedNames = new Set();
+let managerOpen = false;
+
+let acInput = null;
+let acItems = [];
+let acIndex = -1;
+let acTokenStart = -1;
+
+const expressionKeywords = [
+    {name:'sin', detail:'function'},
+    {name:'cos', detail:'function'},
+    {name:'tan', detail:'function'},
+    {name:'asin', detail:'function'},
+    {name:'acos', detail:'function'},
+    {name:'atan', detail:'function'},
+    {name:'sqrt', detail:'function'},
+    {name:'abs', detail:'function'},
+    {name:'min', detail:'function'},
+    {name:'max', detail:'function'},
+    {name:'round', detail:'function'},
+    {name:'floor', detail:'function'},
+    {name:'ceil', detail:'function'},
+    {name:'pi', detail:'constant'}
+];
+
+function send(action, payload) {
+    const data = JSON.stringify(payload || {});
+    if (window.adsk && adsk.fusionSendData) {
+        adsk.fusionSendData(action, data);
+    }
+}
+
+function setStatus(text, isError) {
+    const s = document.getElementById('status');
+    s.textContent = text;
+    s.className = isError ? 'error' : '';
+}
+
+function renderQuick(data) {
+    const box = document.getElementById('parameters');
+    box.innerHTML = '';
+    currentNames = [];
+
+    (data.parameters || []).forEach((p) => {
+        currentNames.push(p.name);
+
+        const row = document.createElement('div');
+        row.className = 'row';
+
+        const label = document.createElement('label');
+        label.className = 'param-label';
+        label.textContent = p.name;
+        label.title = p.name;
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.id = 'param_' + p.name;
+        input.value = p.missing ? '<parameter not found>' : (p.expression || '');
+        input.disabled = !!p.missing;
+        if (p.missing) input.classList.add('missing');
+
+        input.addEventListener('input', () => {
+            input.classList.remove('input-error');
+            showAutocomplete(input);
+        });
+
+        input.addEventListener('click', () => showAutocomplete(input));
+
+        input.addEventListener('keydown', (e) => {
+            if (isAutocompleteOpen()) {
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    moveAutocomplete(1);
+                    return;
+                }
+                if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    moveAutocomplete(-1);
+                    return;
+                }
+                if (e.key === 'Enter' || e.key === 'Tab') {
+                    if (acIndex >= 0) {
+                        e.preventDefault();
+                        acceptAutocomplete();
+                        return;
+                    }
+                }
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    hideAutocomplete();
+                    return;
+                }
+            }
+
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                hideAutocomplete();
+                apply();
+            }
+        });
+
+        input.addEventListener('blur', () => {
+            setTimeout(hideAutocomplete, 120);
+        });
+
+        row.appendChild(label);
+        row.appendChild(input);
+        box.appendChild(row);
+    });
+
+    if (currentNames.length === 0) {
+        box.textContent = 'No quick parameters selected.';
+    }
+}
+
+
+function isAutocompleteOpen() {
+    return document.getElementById('autocomplete').style.display === 'block';
+}
+
+function hideAutocomplete() {
+    const box = document.getElementById('autocomplete');
+    box.style.display = 'none';
+    box.innerHTML = '';
+    acInput = null;
+    acItems = [];
+    acIndex = -1;
+    acTokenStart = -1;
+}
+
+function currentToken(input) {
+    const pos = input.selectionStart ?? input.value.length;
+    const left = input.value.slice(0, pos);
+    const match = left.match(/[A-Za-z_][A-Za-z0-9_]*$/);
+    if (!match) return null;
+    return {
+        text: match[0],
+        start: pos - match[0].length,
+        end: pos
+    };
+}
+
+function showAutocomplete(input) {
+    const token = currentToken(input);
+    if (!token || token.text.length < 1) {
+        hideAutocomplete();
+        return;
+    }
+
+    const needle = token.text.toLowerCase();
+
+    const paramMatches = allParameters
+        .filter(p => p.name.toLowerCase().startsWith(needle) && p.name.toLowerCase() !== needle)
+        .sort((a,b) => {
+            const fav = Number(!!b.favorite) - Number(!!a.favorite);
+            if (fav) return fav;
+            return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+        })
+        .slice(0, 12)
+        .map(p => ({
+            name: p.name,
+            detail: p.favorite ? 'parameter ★' : 'parameter',
+            group: 'Parameters'
+        }));
+
+    const keywordMatches = expressionKeywords
+        .filter(k => k.name.toLowerCase().startsWith(needle) && k.name.toLowerCase() !== needle)
+        .slice(0, 8)
+        .map(k => ({
+            name: k.name,
+            detail: k.detail,
+            group: 'Functions / constants'
+        }));
+
+    const matches = [...paramMatches, ...keywordMatches];
+    if (!matches.length) {
+        hideAutocomplete();
+        return;
+    }
+
+    acInput = input;
+    acItems = matches;
+    acIndex = 0;
+    acTokenStart = token.start;
+
+    renderAutocomplete();
+
+    const box = document.getElementById('autocomplete');
+    const rect = input.getBoundingClientRect();
+    box.style.left = `${Math.max(4, rect.left)}px`;
+    box.style.top = `${Math.min(window.innerHeight - 250, rect.bottom + 2)}px`;
+    box.style.width = `${Math.max(200, rect.width)}px`;
+    box.style.display = 'block';
+}
+
+function renderAutocomplete() {
+    const box = document.getElementById('autocomplete');
+    box.innerHTML = '';
+
+    let lastGroup = '';
+    acItems.forEach((item, index) => {
+        if (item.group !== lastGroup) {
+            const g = document.createElement('div');
+            g.className = 'ac-group';
+            g.textContent = item.group;
+            box.appendChild(g);
+            lastGroup = item.group;
+        }
+
+        const row = document.createElement('div');
+        row.className = 'ac-item' + (index === acIndex ? ' active' : '');
+        row.dataset.index = String(index);
+
+        const name = document.createElement('span');
+        name.textContent = item.name;
+        row.appendChild(name);
+
+        const detail = document.createElement('span');
+        detail.className = 'ac-detail';
+        detail.textContent = item.detail;
+        row.appendChild(detail);
+
+        row.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            acIndex = index;
+            acceptAutocomplete();
+        });
+
+        box.appendChild(row);
+    });
+}
+
+function moveAutocomplete(delta) {
+    if (!acItems.length) return;
+    acIndex = (acIndex + delta + acItems.length) % acItems.length;
+    renderAutocomplete();
+
+    const active = document.querySelector('#autocomplete .ac-item.active');
+    if (active) active.scrollIntoView({block:'nearest'});
+}
+
+function acceptAutocomplete() {
+    if (!acInput || acIndex < 0 || acIndex >= acItems.length) return;
+
+    const item = acItems[acIndex];
+    const pos = acInput.selectionStart ?? acInput.value.length;
+    const before = acInput.value.slice(0, acTokenStart);
+    const after = acInput.value.slice(pos);
+
+    let insertion = item.name;
+    if (item.detail === 'function') {
+        insertion += '(';
+    }
+
+    acInput.value = before + insertion + after;
+    const newPos = before.length + insertion.length;
+    acInput.focus();
+    acInput.setSelectionRange(newPos, newPos);
+    acInput.classList.remove('input-error');
+    hideAutocomplete();
+}
+
+function clearExpressionErrors() {
+    document.querySelectorAll('input.input-error').forEach(el => el.classList.remove('input-error'));
+}
+
+function markExpressionError(parameterName) {
+    clearExpressionErrors();
+    if (!parameterName) return;
+
+    const input = document.getElementById('param_' + parameterName);
+    if (input) {
+        input.classList.add('input-error');
+        input.focus();
+        input.scrollIntoView({block:'nearest'});
+    }
+}
+
+function collectQuick() {
+    const values = {};
+    currentNames.forEach((name) => {
+        const input = document.getElementById('param_' + name);
+        if (input && !input.disabled) values[name] = input.value;
+    });
+    return {values};
+}
+
+function apply() {
+    clearExpressionErrors();
+    hideAutocomplete();
+    setStatus('Applying...', false);
+    send('apply', collectQuick());
+}
+
+function visibleParameters() {
+    const f = document.getElementById('filter').value.trim().toLowerCase();
+    let list = allParameters.filter(p => !f || p.name.toLowerCase().includes(f));
+    const sort = document.getElementById('sort').value;
+
+    list.sort((a, b) => {
+        const an = a.name.toLowerCase();
+        const bn = b.name.toLowerCase();
+
+        if (sort === 'favorites') {
+            const d = Number(!!b.favorite) - Number(!!a.favorite);
+            if (d) return d;
+        } else if (sort === 'selected') {
+            const d = Number(checkedNames.has(b.name)) - Number(checkedNames.has(a.name));
+            if (d) return d;
+        } else if (sort === 'unselected') {
+            const d = Number(checkedNames.has(a.name)) - Number(checkedNames.has(b.name));
+            if (d) return d;
+        }
+
+        if (sort === 'za') return bn.localeCompare(an);
+        return an.localeCompare(bn);
+    });
+
+    return list;
+}
+
+function renderManager() {
+    const box = document.getElementById('parameterList');
+    box.innerHTML = '';
+
+    const list = visibleParameters();
+    document.getElementById('listCount').textContent =
+        `${list.length} shown / ${allParameters.length} total — ${checkedNames.size} selected`;
+
+    list.forEach(p => {
+        const row = document.createElement('div');
+        row.className = 'select-row';
+
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = checkedNames.has(p.name);
+        cb.addEventListener('change', () => {
+            if (cb.checked) checkedNames.add(p.name);
+            else checkedNames.delete(p.name);
+            renderManager();
+        });
+
+        const text = document.createElement('div');
+        text.className = 'select-name';
+        text.title = `${p.name} = ${p.expression}`;
+
+        const name = document.createElement('span');
+        name.textContent = (p.favorite ? '★ ' : '') + p.name;
+
+        const expr = document.createElement('span');
+        expr.className = 'expr-preview';
+        expr.textContent = p.expression ? `= ${p.expression}` : '';
+
+        text.appendChild(name);
+        text.appendChild(expr);
+
+        // Clicking the name also toggles the checkbox.
+        text.addEventListener('click', () => {
+            if (checkedNames.has(p.name)) checkedNames.delete(p.name);
+            else checkedNames.add(p.name);
+            renderManager();
+        });
+
+        row.appendChild(cb);
+        row.appendChild(text);
+        box.appendChild(row);
+    });
+}
+
+
+function escapeHtml(text) {
+    return String(text || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function renderConfig(cfg) {
+    const el = document.getElementById('configInfo');
+    if (!cfg || !cfg.folder) {
+        el.innerHTML = '<div><b>Config folder:</b> not selected</div>';
+        el.title = '';
+        return;
+    }
+
+    const fileText = cfg.fileName || '(not yet created)';
+    el.innerHTML =
+        `<div><b>Config folder:</b> <span class="pathText">${escapeHtml(cfg.folder)}</span></div>` +
+        `<div style="margin-top:3px;"><b>Design config:</b> ${escapeHtml(fileText)}</div>`;
+    el.title = cfg.file || cfg.folder;
+}
+
+function render(data) {
+    clearExpressionErrors();
+    hideAutocomplete();
+    renderConfig(data.config || {});
+    renderQuick(data);
+
+    allParameters = data.allParameters || [];
+    checkedNames = new Set(data.selectedNames || []);
+    if (managerOpen) renderManager();
+
+    setStatus(data.status || 'Ready', false);
+}
+
+function toggleManager(open) {
+    managerOpen = open === undefined ? !managerOpen : !!open;
+    document.getElementById('manager').style.display = managerOpen ? 'block' : 'none';
+    document.getElementById('toggleManager').textContent =
+        managerOpen ? 'Hide manager' : 'Manage parameters…';
+    if (managerOpen) renderManager();
+}
+
+document.getElementById('chooseConfigFolder').addEventListener('click', () => {
+    setStatus('Choosing config folder...', false);
+    send('chooseConfigFolder', {});
+});
+
+document.getElementById('apply').addEventListener('click', apply);
+
+document.getElementById('reload').addEventListener('click', () => {
+    setStatus('Reloading...', false);
+    send('reload', {});
+});
+
+document.getElementById('toggleManager').addEventListener('click', () => toggleManager());
+
+document.getElementById('cancelManager').addEventListener('click', () => toggleManager(false));
+
+document.getElementById('filter').addEventListener('input', renderManager);
+document.getElementById('sort').addEventListener('change', renderManager);
+
+document.getElementById('selectVisible').addEventListener('click', () => {
+    visibleParameters().forEach(p => checkedNames.add(p.name));
+    renderManager();
+});
+
+document.getElementById('clearVisible').addEventListener('click', () => {
+    visibleParameters().forEach(p => checkedNames.delete(p.name));
+    renderManager();
+});
+
+document.getElementById('saveSelection').addEventListener('click', () => {
+    // Preserve alphabetical order in the saved subset for predictability.
+    const names = Array.from(checkedNames).sort((a,b) =>
+        a.toLowerCase().localeCompare(b.toLowerCase())
+    );
+    setStatus('Saving selection...', false);
+    send('saveSelection', {names});
+});
+
+window.fusionJavaScriptHandler = {
+    handle: function(action, data) {
+        try {
+            const obj = JSON.parse(data || '{}');
+
+            if (action === 'modelData') {
+                render(obj);
+            } else if (action === 'applyResult') {
+                setStatus(obj.message || (obj.ok ? 'Applied.' : 'Error'), !obj.ok);
+                if (!obj.ok) markExpressionError(obj.errorParameter || '');
+            } else if (action === 'selectionResult') {
+                setStatus(obj.message || (obj.ok ? 'Selection applied.' : 'Error'), !obj.ok);
+                if (obj.ok) toggleManager(false);
+            } else if (action === 'folderResult') {
+                if (!obj.cancelled) {
+                    setStatus(obj.message || (obj.ok ? 'Config folder selected.' : 'Error'), !obj.ok);
+                }
+            }
+        } catch (e) {
+            setStatus('UI error: ' + e, true);
+        }
+        return JSON.stringify({status: 'OK'});
+    }
+};
+
+window.addEventListener('load', () => {
+    setTimeout(() => send('ready', {}), 150);
+});
+</script>
+</body>
+</html>
