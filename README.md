@@ -18,6 +18,10 @@ Instead of repeatedly opening **Change Parameters** and searching through a larg
 
 Parameter values stay in the Fusion design. The JSON config stores only which parameters are shown in Quick Parameters.
 
+![Quick Parameters Palette in Fusion 360](<images/Screenshot QPP.png>)
+
+*Quick Parameters Palette with quick editing and parameter selection controls in Fusion 360.*
+
 ## Installation
 
 1. Download or clone the repository.
