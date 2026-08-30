@@ -60,4 +60,19 @@ See [USER_MANUAL.md](USER_MANUAL.md) for details.
 
 ## License
 
-MIT is a good fit for this project.
+This project is available under the MIT License.
+
+## Contributing
+
+Bug reports, improvements, and pull requests are welcome.
+
+When reporting an issue, include:
+
+* Fusion version
+* Operating system
+* A minimal example CSV
+* The displayed error or processing summary
+
+## Acknowledgments
+
+- AI-assisted tools were used to support the coding, documentation, and review process. All resulting changes were reviewed and tested by the project maintainer.

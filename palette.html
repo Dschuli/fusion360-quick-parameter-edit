@@ -106,6 +106,12 @@
     padding: 4px 8px;
     font-size: 12px;
   }
+  .manager-actions {
+    flex-wrap: nowrap;
+  }
+  .manager-actions .saveSelection {
+    margin-left: auto;
+  }
   #parameterList {
     border: 1px solid rgba(128,128,128,.45);
     max-height: 270px;
@@ -176,16 +182,17 @@
     </select>
   </div>
 
-  <div class="small-buttons">
+  <div class="small-buttons manager-actions">
     <button id="selectVisible">Select visible</button>
     <button id="clearVisible">Clear visible</button>
+    <button class="saveSelection">Apply selection &amp; close</button>
   </div>
 
   <div id="listCount" class="count"></div>
   <div id="parameterList"></div>
 
   <div class="buttons">
-    <button id="saveSelection"><strong>Apply selection</strong></button>
+    <button class="saveSelection">Apply selection &amp; close</button>
     <button id="cancelManager">Close</button>
   </div>
 </div>
@@ -646,13 +653,24 @@ document.getElementById('clearVisible').addEventListener('click', () => {
     renderManager();
 });
 
-document.getElementById('saveSelection').addEventListener('click', () => {
+function saveSelection() {
     // Preserve alphabetical order in the saved subset for predictability.
     const names = Array.from(checkedNames).sort((a,b) =>
         a.toLowerCase().localeCompare(b.toLowerCase())
     );
     setStatus('Saving selection...', false);
     send('saveSelection', {names});
+}
+
+document.querySelectorAll('.saveSelection').forEach(button => {
+    button.addEventListener('click', saveSelection);
+});
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !e.defaultPrevented) {
+        e.preventDefault();
+        send('closePalette', {});
+    }
 });
 
 window.fusionJavaScriptHandler = {

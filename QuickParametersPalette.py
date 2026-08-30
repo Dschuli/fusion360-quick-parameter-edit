@@ -429,6 +429,9 @@ class PaletteHTMLEventHandler(adsk.core.HTMLEventHandler):
                 if result.get('ok'):
                     send_model_data()
 
+            elif action == 'closePalette':
+                palette.isVisible = False
+
         except:
             if _ui:
                 _ui.messageBox('Quick Parameters palette error:\n\n' + traceback.format_exc())
