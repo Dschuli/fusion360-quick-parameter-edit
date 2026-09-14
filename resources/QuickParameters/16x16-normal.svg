@@ -1,6 +1,4 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
-  <rect x="0.75" y="0.75" width="14.5" height="14.5" rx="3" fill="#147D92" stroke="#0D5968" stroke-width="1"/>
-  <path d="M3 5.1h4.2M4.8 3.4v6.7M3.2 9.8l3.3-6.1" fill="none" stroke="#fff" stroke-width="1.35" stroke-linecap="round"/>
-  <path d="M8.3 7.1l1.35 2.7m0-2.7L8.3 9.8" fill="none" stroke="#fff" stroke-width="1.15" stroke-linecap="round"/>
-  <path d="M11.8 4.3h1.25M11.8 6.3h1.25M11.8 11.6h1.25" fill="none" stroke="#BFEAF0" stroke-width="1.05" stroke-linecap="round"/>
+  <rect x="0.5" y="0.5" width="15" height="15" rx="3" fill="#147D92"/>
+  <g fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round"><polyline points="8.0000,3.7000 7.6795,3.6138 7.3841,3.5545 7.1130,3.5213 6.8653,3.5134 6.6403,3.5301 6.4370,3.5704 6.2548,3.6335 6.0927,3.7187 5.9500,3.8250 5.8258,3.9517 5.7193,4.0980 5.6296,4.2630 5.5560,4.4459 5.4977,4.6458 5.4537,4.8620 5.4233,5.0937 5.4057,5.3400 5.4000,5.6000 5.4000,12.3000" stroke-width="1.65"/><polyline points="3.6000,6.7000 7.4000,6.7000" stroke-width="1.65"/><polyline points="9.3500,8.0000 12.1500,12.0000" stroke-width="1.5"/><polyline points="12.1500,8.0000 9.3500,12.0000" stroke-width="1.5"/><polyline points="9.4000,3.8000 12.1000,3.8000" stroke-width="0.7"/><polyline points="9.4000,5.5000 12.1000,5.5000" stroke-width="0.7"/></g>
 </svg>

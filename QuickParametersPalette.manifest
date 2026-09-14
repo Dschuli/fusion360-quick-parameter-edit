@@ -2,7 +2,7 @@
   "autodeskProduct": "Fusion360",
   "type": "addin",
   "id": "cfd634d6-31c2-4df4-a6c6-quickparameterspal",
-  "author": "OpenAI",
+  "author": "Dschuli/OpenAI",
   "description": {
     "": "Quick parameter editing with remembered floating placement, palette overlap avoidance, position reset and menu toggle."
   },
