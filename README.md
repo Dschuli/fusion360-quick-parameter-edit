@@ -7,6 +7,10 @@ Instead of repeatedly opening **Change Parameters** and searching through a larg
 ## Features
 
 - Persistent quick-edit palette
+- Floating palette with remembered position and size
+- Avoids overlap with visible palettes when opening, without moving afterward
+- Fixed header with position reset and Close controls
+- Menu command toggles the palette open and closed
 - Edit values, formulas, and parameter references
 - Parameter autocomplete while typing
 - Invalid expressions are highlighted and rolled back safely
@@ -30,6 +34,20 @@ Parameter values stay in the Fusion design. The JSON config stores only which pa
 4. Click **+** and select the `QuickParametersPalette` folder.
 5. Run the add-in.
 6. Optionally enable **Run on Startup**.
+
+## Version 1.3
+
+QPP remembers your preferred position and size and checks for overlapping visible
+palettes when opening. Reset places it in the rightmost available space, above
+the Sketch Palette so its header controls remain accessible. Native docking is
+disabled; QPP stays freely movable and resizable.
+
+On the first opening after loading the add-in, a small blank window briefly
+appears while surrounding palettes settle. QPP then moves, expands to its normal
+size and displays its content. Later openings reuse the initialized window.
+
+To update, stop the add-in, replace its files and run it again. Your configuration
+folder and saved placement are retained.
 
 ## First use
 
@@ -74,8 +92,8 @@ When reporting an issue, include:
 
 * Fusion version
 * Operating system
-* A minimal example CSV
-* The displayed error or processing summary
+* Steps to reproduce and relevant parameter expressions
+* The displayed error and a screenshot where useful
 
 ## Acknowledgments
 

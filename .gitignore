@@ -1,3 +1,8 @@
 .vscode/
 __pycache__/
 *.pyc
+test-builds/
+tests/
+POSITION_TEST.md
+PALETTE_DIAGNOSTICS.md
+palette_diagnostics.json

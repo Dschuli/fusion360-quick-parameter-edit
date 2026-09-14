@@ -2,18 +2,35 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>Quick Parameters</title>
+<title>Quick Parameters 1.3</title>
 <style>
-  :root { color-scheme: light dark; }
+  :root {
+    color-scheme: light dark;
+    --palette-background: #f4f4f4;
+    --palette-border: #d6d6d6;
+    background: var(--palette-background);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --palette-background: #2b2b2b; --palette-border: #555; }
+  }
+  /* Keep the browser laid out and running while native placement settles. */
+  body.startup-pending { opacity: 0; pointer-events: none; }
   * { box-sizing: border-box; }
+  html { height: 100%; }
   body {
+    background: var(--palette-background);
+    color: CanvasText;
     font-family: Arial, sans-serif;
-    margin: 12px;
+    margin: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
     font-size: 13px;
   }
   .row {
     display: grid;
-    grid-template-columns: 42% 58%;
+    grid-template-columns: minmax(0, 42fr) minmax(0, 58fr);
     gap: 8px;
     align-items: center;
     margin-bottom: 8px;
@@ -75,6 +92,38 @@
     flex-wrap: wrap;
   }
   button { padding: 6px 12px; }
+  .palette-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex: 0 0 auto;
+    gap: 4px;
+    min-height: 32px;
+    padding: 3px 12px;
+  }
+  .palette-header .section-title { margin-bottom: 0; margin-right: auto; }
+  #paletteContent {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    padding: 0 12px 12px;
+  }
+  #closePalette, #resetPosition {
+    flex: 0 0 26px;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    background: Canvas;
+    color: CanvasText;
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  #resetPosition { font-size: 20px; }
+  #closePalette:hover, #resetPosition:hover { background: rgba(128,128,128,.2); }
+  #closePalette:focus-visible, #resetPosition:focus-visible { outline: 2px solid Highlight; outline-offset: 1px; }
   #status {
     margin-top: 10px;
     min-height: 18px;
@@ -154,9 +203,14 @@
   }
 </style>
 </head>
-<body>
+<body class="startup-pending">
 
-<div class="section-title">Quick edit</div>
+<div class="palette-header">
+  <div class="section-title">Quick edit</div>
+  <button id="resetPosition" type="button" aria-label="Reset palette position" title="Reset position and standard height">&#8634;</button>
+  <button id="closePalette" type="button" aria-label="Close Quick Parameters" title="Close Quick Parameters (Esc)">&times;</button>
+</div>
+<main id="paletteContent">
 <div id="parameters"></div>
 
 <div class="buttons">
@@ -204,6 +258,7 @@
   <button id="chooseConfigFolder">Config folder…</button>
 </div>
 
+</main>
 <div id="autocomplete"></div>
 
 <script>
@@ -666,6 +721,10 @@ document.querySelectorAll('.saveSelection').forEach(button => {
     button.addEventListener('click', saveSelection);
 });
 
+document.getElementById('closePalette').addEventListener('click', () => send('closePalette', {}));
+document.getElementById('resetPosition').addEventListener('click', () => send('resetPosition', {}));
+document.getElementById('paletteContent').addEventListener('scroll', hideAutocomplete, true);
+
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !e.defaultPrevented) {
         e.preventDefault();
@@ -673,12 +732,26 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
+function revealStartupContent() {
+    document.body.classList.remove('startup-pending');
+}
+// Fail open even if a placement callback is lost or Python reports an error.
+setTimeout(revealStartupContent, 4500);
+
 window.fusionJavaScriptHandler = {
     handle: function(action, data) {
         try {
             const obj = JSON.parse(data || '{}');
 
-            if (action === 'modelData') {
+            if (action === 'placementComplete') {
+                requestAnimationFrame(() => requestAnimationFrame(revealStartupContent));
+            } else if (action === 'sampleStartupPlacement') {
+                setTimeout(() => send('startupPlacementSample', {token: obj.token}), 250);
+            } else if (action === 'preparePlacement') {
+                setTimeout(() => send('placementReady', {}), 250);
+            } else if (action === 'resetPositionResult') {
+                setStatus(obj.message || 'Position reset.', !obj.ok);
+            } else if (action === 'modelData') {
                 render(obj);
             } else if (action === 'applyResult') {
                 setStatus(obj.message || (obj.ok ? 'Applied.' : 'Error'), !obj.ok);

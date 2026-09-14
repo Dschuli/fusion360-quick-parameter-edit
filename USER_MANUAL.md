@@ -1,4 +1,4 @@
-# Quick Parameters Palette — User Manual
+# Quick Parameters Palette 1.3 — User Manual
 
 ## Purpose
 
@@ -11,7 +11,45 @@ The command is available in:
 - **Solid → Modify → Quick Parameters**
 - **Sketch → Modify → Quick Parameters**
 
-The palette remains open while you work in the model.
+The palette remains open while you work in the model. The Quick Parameters
+menu/toolbar command toggles it: open when hidden, save position and close when visible.
+
+QPP stays floating and can be dragged and resized. Native docking is disabled
+to avoid rearranging other Fusion palettes. Custom collapse/expand is not included.
+
+Close it using the **× button at the top right** or **Esc**. The close button stays
+visible with **Quick edit** in a compact top header. Only the content below it
+scrolls, so parameter rows cannot slide behind the header buttons.
+
+## Position and size
+
+The **reset arrow beside ×** restores the standard 640-pixel height, keeps your
+current width, and requests the rightmost free position. With the Sketch Palette
+(SP) visible, it starts 80 pixels above SP, keeping the top controls accessible.
+Placement stays within the available space; the top cannot move above the viewport.
+Without SP, Reset uses its previously observed vertical offset, or a default
+starting offset. Reset immediately saves the resulting position and size.
+If no suitable space fits or Fusion refuses the height, the status explains it.
+
+QPP remembers position and size when you close it or stop
+the add-in. On reopening, it uses that preference if its title/close area is
+accessible and it does not overlap an API-visible palette. Its bottom may extend
+beyond the model viewport. Otherwise it chooses the nearest free
+space temporarily. Moving or resizing QPP yourself and then closing it saves
+your new preference. QPP does not track other palettes after opening. If no space
+fits, it leaves the current position alone.
+
+## Startup appearance
+
+The first opening after loading the add-in starts with a small blank, opaque
+window. Once the surrounding palette positions settle, QPP moves, expands to
+your saved size (430 × 640 pixels by default), and reveals its content. This
+avoids briefly displaying the full parameter list in the wrong location.
+
+Startup checks run every 250 milliseconds, wait at least 750 milliseconds and
+allow up to three seconds for other palettes to settle. Normal subsequent
+openings reuse the initialized window. QPP does not move automatically when
+another palette opens later.
 
 ## Quick Edit
 
