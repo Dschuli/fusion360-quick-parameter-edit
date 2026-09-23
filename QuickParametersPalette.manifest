@@ -6,7 +6,7 @@
   "description": {
     "": "Quick parameter editing with remembered floating placement, palette overlap avoidance, position reset and menu toggle."
   },
-  "version": "1.3.0",
+  "version": "1.3.1",
   "runOnStartup": false,
   "supportedOS": "windows|mac",
   "editEnabled": true
