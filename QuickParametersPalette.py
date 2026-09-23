@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 _app = None
 _ui = None
 _handlers = []
+_document_activated_handler = None
 _placement_pending = False
 _placement_baseline = None
 _placement_initialized = False
@@ -698,6 +699,18 @@ def sample_startup_placement(palette, token):
         palette.sendInfoToHTML('sampleStartupPlacement', json.dumps({'token': token}))
 
 
+class DocumentActivatedHandler(adsk.core.DocumentEventHandler):
+    def notify(self, args):
+        try:
+            # This event runs after activation, so model_data reads the new
+            # design and its own saved parameter selection.
+            palette = _ui.palettes.itemById(PALETTE_ID)
+            if palette and palette.isVisible:
+                send_model_data()
+        except Exception:
+            _app.log('QPP design switch refresh failed: ' + traceback.format_exc())
+
+
 class PaletteClosedHandler(adsk.core.UserInterfaceGeneralEventHandler):
     def notify(self, args):
         palette = _ui.palettes.itemById(PALETTE_ID)
@@ -859,11 +872,15 @@ def discard_previous_palette():
 
 
 def run(context):
-    global _app, _ui
+    global _app, _ui, _document_activated_handler
     try:
         _app = adsk.core.Application.get()
         _ui = _app.userInterface
         discard_previous_palette()
+
+        if _document_activated_handler is None:
+            _document_activated_handler = DocumentActivatedHandler()
+            _app.documentActivated.add(_document_activated_handler)
 
         cmd_def = _ui.commandDefinitions.itemById(CMD_ID)
         if not cmd_def:
@@ -899,7 +916,12 @@ def run(context):
 
 
 def stop(context):
+    global _document_activated_handler
     try:
+        if _app and _document_activated_handler is not None:
+            _app.documentActivated.remove(_document_activated_handler)
+            _document_activated_handler = None
+
         if _ui:
             palette = _ui.palettes.itemById(PALETTE_ID)
             if palette:
