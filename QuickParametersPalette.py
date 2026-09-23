@@ -18,6 +18,8 @@ _placement_initialized = False
 _startup_check = None
 _startup_generation = 0
 _startup_full_size = None
+_placement_document = None
+_document_placements = []
 
 CMD_ID = 'OpenAI_QuickParametersPalette_Command'
 CMD_NAME = 'Quick Parameters'
@@ -58,6 +60,11 @@ def record_palette_diagnostics(stage):
         design = get_design()
         edit_object = design.activeEditObject if design else None
         snapshot['activeEditObjectType'] = edit_object.objectType if edit_object else None
+        snapshot['viewportBounds'] = viewport_screen_bounds()
+        viewport = _app.activeViewport
+        corner = viewport.viewToScreen(adsk.core.Point2D.create(viewport.width, viewport.height))
+        snapshot['convertedViewportCorner'] = [corner.x, corner.y] if corner else None
+        snapshot['viewportSize'] = [viewport.width, viewport.height]
     except Exception as exc:
         snapshot['contextError'] = str(exc)
 
@@ -272,25 +279,21 @@ def model_data():
         selected = favorites
         result['selectedNames'] = selected
 
-    missing = []
-
-    # Quick-edit subset.
+    # Only expose parameters that still exist in this design. In particular,
+    # a selection may outlive an unsaved parameter after reopening the file.
+    # The manager must receive the same filtered selection as Quick edit.
+    available_selected = []
     for name in selected:
         p = design.userParameters.itemByName(name)
         if p:
+            available_selected.append(name)
             result['parameters'].append({
                 'name': name,
                 'expression': p.expression,
-                'value': p.value,
                 'unit': p.unit
             })
-        else:
-            result['parameters'].append({
-                'name': name,
-                'expression': '',
-                'missing': True
-            })
-            missing.append(name)
+    selected = available_selected
+    result['selectedNames'] = selected
 
     # Full user parameter list for manager.
     ups = design.userParameters
@@ -314,8 +317,6 @@ def model_data():
         result['status'] = 'Choose a config folder to save this design’s Quick Parameters.'
     elif not cfg['exists']:
         result['status'] = 'No config yet — Favorites shown as initial selection.'
-    elif missing:
-        result['status'] = 'Missing: ' + ', '.join(missing)
     else:
         result['status'] = 'Ready'
 
@@ -479,6 +480,78 @@ def geometry_changed(current, baseline):
     return any(abs(current[k] - baseline[k]) > 2 for k in current)
 
 
+def viewport_screen_bounds():
+    """Use viewport dimensions without applying point-coordinate scaling twice."""
+    viewport = _app.activeViewport
+    origin = viewport.viewToScreen(adsk.core.Point2D.create(0, 0))
+    if origin is None or viewport.width <= 0 or viewport.height <= 0:
+        raise RuntimeError('The active viewport has no usable screen bounds')
+    left, top = int(round(origin.x)), int(round(origin.y))
+    return left, top, left + int(viewport.width), top + int(viewport.height)
+
+
+def document_placement_record():
+    """Keep unsaved documents distinct and follow them through their first save."""
+    global _placement_document
+    if _placement_document is None:
+        _placement_document = _app.activeDocument
+    doc = _placement_document
+    for record in _document_placements:
+        if record['document'] == doc:
+            record['key'] = document_placement_key(doc) or record['key']
+            return record
+    record = {'document': doc, 'key': document_placement_key(doc),
+              'geometry': None, 'visible': False}
+    _document_placements.append(record)
+    return record
+
+
+def document_placement_key(document):
+    try:
+        data_file = document.dataFile if document else None
+        return data_file.id if data_file else None
+    except Exception:
+        return None
+
+
+def load_placement_settings():
+    settings = load_settings()
+    record = document_placement_record()
+    key = record['key']
+    placements = settings.get('designPaletteGeometries', {})
+    if not isinstance(placements, dict):
+        placements = {}
+    preferred = placements.get(key) if key else None
+    if not valid_geometry(preferred):
+        preferred = record['geometry']
+        if key and valid_geometry(preferred):
+            # An unsaved design now has a durable Fusion data-file identity.
+            placements[key] = preferred
+            settings['designPaletteGeometries'] = placements
+            save_settings(settings)
+    record['geometry'] = preferred
+    settings['preferredPaletteGeometry'] = preferred
+    return settings
+
+
+def save_placement_settings(settings):
+    preferred = settings.get('preferredPaletteGeometry')
+    record = document_placement_record()
+    record['geometry'] = preferred
+    key = record['key']
+    # Merge into current settings so one design never overwrites another.
+    saved = load_settings()
+    if key and valid_geometry(preferred):
+        placements = saved.get('designPaletteGeometries', {})
+        if not isinstance(placements, dict):
+            placements = {}
+        placements[key] = preferred
+        saved['designPaletteGeometries'] = placements
+    if 'standardPaletteTopOffset' in settings:
+        saved['standardPaletteTopOffset'] = settings['standardPaletteTopOffset']
+    save_settings(saved)
+
+
 def remember_palette_position(palette):
     """A temporary placement is not a new preference unless the user moves it."""
     global _placement_pending, _placement_baseline, _startup_check
@@ -486,9 +559,12 @@ def remember_palette_position(palette):
         if not _placement_pending and _placement_baseline is not None:
             current = palette_geometry(palette)
             if geometry_changed(current, _placement_baseline):
-                settings = load_settings()
+                settings = load_placement_settings()
                 settings['preferredPaletteGeometry'] = current
-                save_settings(settings)
+                save_placement_settings(settings)
+            else:
+                # Persist an unsaved document's geometry after its first save.
+                load_placement_settings()
     except Exception as exc:
         _app.log('QPP position could not be saved: ' + str(exc))
     finally:
@@ -523,7 +599,9 @@ def nearest_palette_position(preferred, bounds, obstacles, gap=8, rightmost=Fals
         ys.update((b - gap - h, d + gap))
     candidates = [(px, py) for px in xs for py in ys if fits(px, py)]
     if rightmost:
-        return min(candidates, key=lambda p: (abs(p[1] - y), -p[0], p[1]), default=None)
+        # Reset prioritizes the right edge, even when reaching it requires
+        # moving vertically around another palette on a taller display.
+        return min(candidates, key=lambda p: (-p[0], abs(p[1] - y), p[1]), default=None)
     return min(candidates, key=lambda p: ((p[0]-x)**2 + (p[1]-y)**2, -p[0], p[1]),
                default=None)
 
@@ -548,8 +626,11 @@ def finish_open_placement(palette, allow_hidden=False, reset=False):
         return
     _placement_pending = False
     try:
-        settings = load_settings()
+        settings = load_placement_settings()
         preferred = settings.get('preferredPaletteGeometry')
+        reset = reset or not valid_geometry(preferred)
+        if _startup_full_size is not None and valid_geometry(preferred):
+            restore_startup_size(palette)
         if (valid_geometry(preferred) and preferred['width'] <= 160 and
                 preferred['height'] <= 260):
             # Recover a collapsed strip accidentally saved during versions
@@ -557,18 +638,18 @@ def finish_open_placement(palette, allow_hidden=False, reset=False):
             preferred = dict(preferred, width=430, height=640)
             settings.pop('collapseRestoreGeometry', None)
             settings['preferredPaletteGeometry'] = preferred
-            save_settings(settings)
+            save_placement_settings(settings)
         if not valid_geometry(preferred):
             preferred = palette_geometry(palette)
             if _startup_full_size is not None:
                 preferred.update(width=_startup_full_size[0], height=_startup_full_size[1])
             settings['preferredPaletteGeometry'] = preferred
-            save_settings(settings)
-        viewport = _app.activeViewport
-        origin = viewport.viewToScreen(adsk.core.Point2D.create(0, 0))
-        corner = viewport.viewToScreen(adsk.core.Point2D.create(viewport.width, viewport.height))
-        bounds = (int(origin.x), int(origin.y), int(corner.x), int(corner.y))
+            save_placement_settings(settings)
+        bounds = viewport_screen_bounds()
         if reset:
+            # Placement must use the full saved width, not the temporary
+            # 200-pixel startup frame. Reset also restores standard height.
+            restore_startup_size(palette)
             offset = settings.get('standardPaletteTopOffset', 140)
             if type(offset) is not int or offset < 0:
                 offset = 140
@@ -605,11 +686,13 @@ def finish_open_placement(palette, allow_hidden=False, reset=False):
                 if (palette.left, palette.top) != position:
                     if not palette.setPosition(*position) and (palette.left, palette.top) != position:
                         raise RuntimeError('Fusion rejected the reset position')
+            if reset and (palette.left, palette.top) != position:
+                raise RuntimeError('Fusion did not accept the requested reset position')
             if reset:
                 # Reset is an explicit user choice, unlike automatic collision
                 # avoidance. Persist the actual accepted geometry immediately.
                 settings['preferredPaletteGeometry'] = palette_geometry(palette)
-                save_settings(settings)
+                save_placement_settings(settings)
         record_palette_diagnostics('after placement')
         message = 'Position reset.'
         if reset and palette.height != 640:
@@ -701,10 +784,31 @@ def sample_startup_placement(palette, token):
 
 class DocumentActivatedHandler(adsk.core.DocumentEventHandler):
     def notify(self, args):
+        global _placement_document, _placement_pending, _placement_baseline, _startup_check
         try:
-            # This event runs after activation, so model_data reads the new
-            # design and its own saved parameter selection.
             palette = _ui.palettes.itemById(PALETTE_ID)
+            document = _app.activeDocument
+            if document != _placement_document:
+                # Activation has already changed activeDocument; retain the
+                # outgoing identity until its last visible geometry is saved.
+                if _placement_document is not None:
+                    outgoing = document_placement_record()
+                    outgoing['visible'] = bool(palette and palette.isVisible)
+                    if outgoing['visible']:
+                        remember_palette_position(palette)
+                _placement_document = document
+                _startup_check = None
+                _placement_baseline = None
+                incoming = document_placement_record()
+                _placement_pending = bool(palette and incoming['visible'])
+                if palette:
+                    if _placement_pending and _placement_initialized:
+                        # Restore the incoming design's geometry before
+                        # showing a palette that was hidden in the last tab.
+                        finish_open_placement(palette, allow_hidden=True)
+                    palette.isVisible = incoming['visible']
+                    if _placement_pending:
+                        begin_startup_placement(palette)
             if palette and palette.isVisible:
                 send_model_data()
         except Exception:
@@ -796,7 +900,7 @@ class ShowPaletteExecuteHandler(adsk.core.CommandEventHandler):
                 _placement_baseline = None
             if not palette:
                 _placement_initialized = False
-                preferred = load_settings().get('preferredPaletteGeometry')
+                preferred = load_placement_settings().get('preferredPaletteGeometry')
                 _startup_full_size = (430, 640)
                 if valid_geometry(preferred) and not (preferred['width'] <= 160 and preferred['height'] <= 260):
                     _startup_full_size = (preferred['width'], preferred['height'])
@@ -859,6 +963,9 @@ def discard_previous_palette():
     global _placement_pending, _placement_baseline, _placement_initialized
     global _startup_check, _startup_generation
     global _startup_full_size
+    global _placement_document, _document_placements
+    _placement_document = None
+    _document_placements = []
     _startup_full_size = None
     _startup_generation += 1
     _startup_check = None

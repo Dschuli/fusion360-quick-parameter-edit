@@ -1,4 +1,4 @@
-# Quick Parameters Palette 1.3 — User Manual
+# Quick Parameters Palette 1.4.0 — User Manual
 
 ## Purpose
 
@@ -11,7 +11,8 @@ The command is available in:
 - **Solid → Modify → Quick Parameters**
 - **Sketch → Modify → Quick Parameters**
 
-The palette remains open while you work in the model. The Quick Parameters
+Starting the add-in, including **Run on Startup**, does not open the palette.
+Open it with the command for each new design window. The Quick Parameters
 menu/toolbar command toggles it: open when hidden, save position and close when visible.
 
 QPP stays floating and can be dragged and resized. Native docking is disabled
@@ -23,16 +24,31 @@ scrolls, so parameter rows cannot slide behind the header buttons.
 
 ## Position and size
 
+QPP's open/closed state belongs to each open design window for the current
+session. New or reopened designs start with QPP closed. Switching back to a
+design restores whether you left QPP open or closed. This state is not saved
+between Fusion or add-in sessions; position and size are saved separately.
+
 The **reset arrow beside ×** restores the standard 640-pixel height, keeps your
 current width, and requests the rightmost free position. With the Sketch Palette
 (SP) visible, it starts 80 pixels above SP, keeping the top controls accessible.
+Reset prioritizes the right edge over this starting height; on taller displays,
+it may move below another palette to reach the rightmost free position.
 Placement stays within the available space; the top cannot move above the viewport.
 Without SP, Reset uses its previously observed vertical offset, or a default
 starting offset. Reset immediately saves the resulting position and size.
 If no suitable space fits or Fusion refuses the height, the status explains it.
 
-QPP remembers position and size when you close it or stop
-the add-in. On reopening, it uses that preference if its title/close area is
+QPP saves a separate position and size for each Fusion design when you switch
+designs, close the palette, or stop the add-in. When QPP next opens for that design,
+it restores the saved placement. Saved designs are identified by their Fusion
+file ID, so renaming a design does not lose its placement and identical names
+do not share positions. Unsaved designs retain their own placement during the
+current session; once saved, their placement can persist between sessions.
+
+A design without a saved placement starts at the Reset position with the
+standard 640-pixel height. Reset updates only the current design's placement.
+QPP uses the saved preference if its title/close area is
 accessible and it does not overlap an API-visible palette. Its bottom may extend
 beyond the model viewport. Otherwise it chooses the nearest free
 space temporarily. Moving or resizing QPP yourself and then closing it saves
@@ -42,8 +58,8 @@ fits, it leaves the current position alone.
 ## Startup appearance
 
 The first opening after loading the add-in starts with a small blank, opaque
-window. Once the surrounding palette positions settle, QPP moves, expands to
-your saved size (430 × 640 pixels by default), and reveals its content. This
+window. Once the surrounding palette positions settle, QPP restores the design's
+saved position and size (or uses Reset for a new design), and reveals its content. This
 avoids briefly displaying the full parameter list in the wrong location.
 
 Startup checks run every 250 milliseconds, wait at least 750 milliseconds and
@@ -115,6 +131,12 @@ Available tools:
 
 Click **Apply selection** to save the choices for the current design.
 
+Parameters that no longer exist in the active design are omitted from Quick edit
+and the manager's selection when QPP reloads the design data. This includes
+parameters added during a previous session without saving the Fusion design.
+Use **Reload from design** to refresh the view after changes in Fusion.
+Applying the selection also removes stale parameter names from the JSON config.
+
 ## Per-design configuration
 
 Each Fusion design uses its own JSON config file, for example:
@@ -138,6 +160,11 @@ Click **Config folder…** to change it. The folder picker opens at the currentl
 
 The folder choice is remembered separately on each PC.
 
+Position and size are also stored locally, separately from the parameter-selection
+files. The settings file is `%APPDATA%\QuickParametersPalette\settings.json` on
+Windows or `~/.quickparameterspalette/settings.json` on macOS. Open/closed state
+is held only in memory.
+
 ## Multi-PC use
 
 For shared use across computers, choose a synchronized folder such as Dropbox or OneDrive.
@@ -150,6 +177,9 @@ C:\\Users\\User\\Dropbox\\Fusion360\\QuickParameters
 
 The per-design JSON files are synchronized normally. Each PC remembers its own local path to that shared folder, so Dropbox paths may differ between machines.
 
+Palette positions and sizes are local to each computer and are not synchronized
+through the config folder.
+
 ## Updating the add-in
 
 1. Stop the add-in in **Scripts and Add-Ins**.
@@ -157,3 +187,15 @@ The per-design JSON files are synchronized normally. Each PC remembers its own l
 3. Start it again.
 
 The selected config-folder setting is stored outside the add-in directory and is not lost when updating.
+
+Per-design placements from 1.4.0 are retained. When upgrading from 1.3, each design
+starts at Reset on its first QPP opening because the old shared position is not a
+per-design placement. Restarting the add-in clears all open/closed states.
+
+## Placement diagnostics
+
+Diagnostics are written to a file, not displayed in the palette. On Windows,
+the file is `%APPDATA%\QuickParametersPalette\palette_diagnostics.json`; on macOS,
+it is `~/.quickparameterspalette/palette_diagnostics.json`.
+It keeps the latest 20 snapshots, including viewport bounds, palette geometry,
+and Fusion version. Include this file when reporting a positioning problem.

@@ -7,7 +7,7 @@ Instead of repeatedly opening **Change Parameters** and searching through a larg
 ## Features
 
 - Persistent quick-edit palette
-- Floating palette with remembered position and size
+- Floating palette with position and size remembered per design across sessions
 - Avoids overlap with visible palettes when opening, without moving afterward
 - Fixed header with position reset and Close controls
 - Menu command toggles the palette open and closed
@@ -17,6 +17,8 @@ Instead of repeatedly opening **Change Parameters** and searching through a larg
 - Filterable/sortable parameter manager
 - Fusion Favorites shown first
 - Per-design parameter selections
+- Per-design open/closed state for the current session; newly opened designs start closed
+- Missing parameters omitted from Quick edit and the parameter-manager selection
 - Config files can be stored in Dropbox/OneDrive for multi-PC use
 - Available in **Solid → Modify** and **Sketch → Modify**
 
@@ -35,19 +37,29 @@ Parameter values stay in the Fusion design. The JSON config stores only which pa
 5. Run the add-in.
 6. Optionally enable **Run on Startup**.
 
-## Version 1.3
+## Version 1.4.0
 
-QPP remembers your preferred position and size and checks for overlapping visible
-palettes when opening. Reset places it in the rightmost available space, above
-the Sketch Palette so its header controls remain accessible. Native docking is
-disabled; QPP stays freely movable and resizable.
+QPP remembers position and size separately for each design across sessions.
+Open/closed state is separate for each open design window and lasts only for the
+current session. New and reopened designs start with QPP closed, even when the
+add-in runs on startup. Switching back restores whether you left QPP open or closed.
+
+Reset uses the rightmost free position, including on scaled displays, and avoids
+other visible palettes. Native docking is disabled; QPP stays freely movable and
+resizable. Designs without saved placement use Reset when you first open QPP.
+
+Missing parameters no longer appear as error rows or invisible selected items in
+Manage parameters. Applying a selection removes their stale names from the config.
+Nonnumeric parameters no longer cause a numeric-value read error when loading QPP.
 
 On the first opening after loading the add-in, a small blank window briefly
-appears while surrounding palettes settle. QPP then moves, expands to its normal
-size and displays its content. Later openings reuse the initialized window.
+appears while surrounding palettes settle. QPP then restores the current design's
+position and size, or uses Reset if that design has no saved placement.
 
-To update, stop the add-in, replace its files and run it again. Your configuration
-folder and saved placement are retained.
+To update, stop the add-in, replace its files and run it again. Your parameter
+selections and config-folder setting are retained. Existing 1.4.0 per-design
+placements are retained; the single shared position from 1.3 is not assigned to
+every design. Each design initially uses Reset until it has its own placement.
 
 ## First use
 
