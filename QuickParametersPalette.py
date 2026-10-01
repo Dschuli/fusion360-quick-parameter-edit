@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 _app = None
 _ui = None
 _handlers = []
+_pending_apply = None
 _document_activated_handler = None
 _placement_pending = False
 _placement_baseline = None
@@ -22,6 +23,7 @@ _placement_document = None
 _document_placements = []
 
 CMD_ID = 'OpenAI_QuickParametersPalette_Command'
+APPLY_CMD_ID = 'OpenAI_QuickParametersPalette_Apply'
 CMD_NAME = 'Quick Parameters'
 CMD_DESCRIPTION = 'Show or hide the Quick Parameters palette.'
 PALETTE_ID = 'OpenAI_QuickParametersPalette'
@@ -349,15 +351,9 @@ def apply_expressions(data):
     if not selected:
         selected = list(values.keys())
 
-    old = {}
     changed = []
 
     try:
-        for name in selected:
-            p = design.userParameters.itemByName(name)
-            if p:
-                old[name] = p.expression
-
         for name in selected:
             p = design.userParameters.itemByName(name)
             if not p or name not in values:
@@ -374,7 +370,8 @@ def apply_expressions(data):
                     raise ParameterExpressionError(name, str(inner_exc))
                 changed.append(name)
 
-        design.computeAll()
+        # Expression setters update dependencies. A full compute here can
+        # disturb the timeline while a sketch is being edited.
 
         return {
             'ok': True,
@@ -382,18 +379,7 @@ def apply_expressions(data):
         }
 
     except Exception as exc:
-        for name, expr in old.items():
-            try:
-                p = design.userParameters.itemByName(name)
-                if p:
-                    p.expression = expr
-            except:
-                pass
-        try:
-            design.computeAll()
-        except:
-            pass
-
+        # The execute handler aborts the entire Fusion transaction on failure.
         if isinstance(exc, ParameterExpressionError):
             return {
                 'ok': False,
@@ -856,10 +842,7 @@ class PaletteHTMLEventHandler(adsk.core.HTMLEventHandler):
                 palette.sendInfoToHTML('resetPositionResult', json.dumps(result))
 
             elif action == 'apply':
-                result = apply_expressions(data)
-                palette.sendInfoToHTML('applyResult', json.dumps(result))
-                if result.get('ok'):
-                    send_model_data()
+                queue_parameter_apply(data)
 
             elif action == 'saveSelection':
                 result = update_selection(data)
@@ -880,6 +863,86 @@ class PaletteHTMLEventHandler(adsk.core.HTMLEventHandler):
         except:
             if _ui:
                 _ui.messageBox('Quick Parameters palette error:\n\n' + traceback.format_exc())
+
+
+def report_apply_result(result):
+    palette = _ui.palettes.itemById(PALETTE_ID)
+    if palette:
+        palette.sendInfoToHTML('applyResult', json.dumps(result))
+        if result.get('ok'):
+            send_model_data()
+
+
+def queue_parameter_apply(data):
+    """Hand palette edits to Fusion's command/undo machinery."""
+    global _pending_apply
+    if _pending_apply is not None:
+        return
+    request = {'data': data, 'document': _app.activeDocument, 'result': None}
+    _pending_apply = request
+    try:
+        definition = _ui.commandDefinitions.itemById(APPLY_CMD_ID)
+        if not definition or not definition.execute():
+            raise RuntimeError('Fusion could not start Apply Quick Parameters.')
+    except Exception as exc:
+        _pending_apply = None
+        report_apply_result({'ok': False, 'message': str(exc)})
+
+
+class ApplyParametersExecuteHandler(adsk.core.CommandEventHandler):
+    def __init__(self, request):
+        super().__init__()
+        self.request = request
+
+    def notify(self, args):
+        request = self.request
+        try:
+            if _app.activeDocument != request['document']:
+                raise RuntimeError('The active design changed. Apply again in the intended design.')
+            result = apply_expressions(request['data'])
+        except Exception as exc:
+            result = {'ok': False, 'message': str(exc)}
+        request['result'] = result
+        if not result.get('ok'):
+            args.executeFailed = True
+            args.executeFailedMessage = result['message']
+
+
+class ApplyParametersDestroyHandler(adsk.core.CommandEventHandler):
+    def __init__(self, request, handlers):
+        super().__init__()
+        self.request = request
+        self.handlers = handlers
+
+    def notify(self, args):
+        global _pending_apply
+        if _pending_apply is self.request:
+            _pending_apply = None
+        try:
+            result = self.request['result'] or {'ok': False, 'message': 'Apply cancelled.'}
+            report_apply_result(result)
+        except Exception:
+            _app.log('QPP apply result refresh failed: ' + traceback.format_exc())
+        finally:
+            for handler in self.handlers:
+                if handler in _handlers:
+                    _handlers.remove(handler)
+            self.handlers.clear()
+
+
+class ApplyParametersCreatedHandler(adsk.core.CommandCreatedEventHandler):
+    def notify(self, args):
+        if _pending_apply is None:
+            return
+        command = args.command
+        command.isRepeatable = False
+        handlers = []
+        execute = ApplyParametersExecuteHandler(_pending_apply)
+        destroy = ApplyParametersDestroyHandler(_pending_apply, handlers)
+        handlers.extend((execute, destroy))
+        command.execute.add(execute)
+        command.destroy.add(destroy)
+        _handlers.extend(handlers)
 
 
 class ShowPaletteExecuteHandler(adsk.core.CommandEventHandler):
@@ -1002,6 +1065,14 @@ def run(context):
         cmd_def.commandCreated.add(created_handler)
         _handlers.append(created_handler)
 
+        apply_def = _ui.commandDefinitions.itemById(APPLY_CMD_ID)
+        if not apply_def:
+            apply_def = _ui.commandDefinitions.addButtonDefinition(
+                APPLY_CMD_ID, 'Apply Quick Parameters', 'Apply parameter changes as one undo step.')
+        apply_created = ApplyParametersCreatedHandler()
+        apply_def.commandCreated.add(apply_created)
+        _handlers.append(apply_created)
+
         # Add to Solid -> Modify.
         workspace = _ui.workspaces.itemById(WORKSPACE_ID)
         panel = workspace.toolbarPanels.itemById(PANEL_ID) if workspace else None
@@ -1023,7 +1094,8 @@ def run(context):
 
 
 def stop(context):
-    global _document_activated_handler
+    global _document_activated_handler, _pending_apply
+    _pending_apply = None
     try:
         if _app and _document_activated_handler is not None:
             _app.documentActivated.remove(_document_activated_handler)
@@ -1052,6 +1124,10 @@ def stop(context):
             cmd_def = _ui.commandDefinitions.itemById(CMD_ID)
             if cmd_def:
                 cmd_def.deleteMe()
+
+            apply_def = _ui.commandDefinitions.itemById(APPLY_CMD_ID)
+            if apply_def:
+                apply_def.deleteMe()
 
         _handlers.clear()
     except:

@@ -6,7 +6,7 @@
   "description": {
     "": "Quick parameter editing with per-design position and size, session-only per-design visibility, palette overlap avoidance and position reset."
   },
-  "version": "1.4.0",
+  "version": "1.4.1",
   "runOnStartup": false,
   "supportedOS": "windows|mac",
   "editEnabled": true
